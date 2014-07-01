@@ -6,12 +6,6 @@
 #include <qdebug.h>
 
 #ifdef Q_OS_WIN
-/*#include <wbemidl.h>
-#include <comdef.h>
-#include <windows.h>
-#pragma comment(lib, "ws2_32.lib")
-#pragma comment(lib, "Wbemuuid.lib")
-*/
 #include <winsock2.h>
 #include <iphlpapi.h>
 #define MALLOC(x) HeapAlloc(GetProcessHeap(), 0, (x))
@@ -246,6 +240,8 @@ bool NetUtils::isValidMask(const QHostAddress &addr) {
 
 
 #ifndef Q_OS_WIN
+
+
 struct route_info {
     in_addr dstAddr;
     in_addr srcAddr;
@@ -315,9 +311,6 @@ void parseRoutes(struct nlmsghdr *nlHdr, struct route_info *rtInfo) {
 }
 #endif
 
-#include <winsock2.h>
-
-
 QList<QHostAddress> NetUtils::getGateways() {
     QList<QHostAddress> result;
 #ifdef Q_OS_WIN
@@ -378,12 +371,12 @@ QList<QHostAddress> NetUtils::getGateways() {
     nlMsg->nlmsg_pid = getpid();
 
     if(send(sock, nlMsg, nlMsg->nlmsg_len, 0) < 0) {
-        return ret;
+        return result;
     }
 
     int len;
     if((len = readNlSock(sock, msgBuf, msgSeq, getpid())) < 0) {
-        return ret;
+        return result;
     }
 
     struct route_info *rtInfo = (struct route_info *)malloc(sizeof(struct route_info));

@@ -18,6 +18,7 @@ DeviceList::DeviceList() :
     _thread.start();
     _scanner.moveToThread(&_thread);
     connect(&_scanner, SIGNAL(needNmap()), this, SIGNAL(needNmap()));
+    connect(&_scanner, SIGNAL(needRoot()), this, SIGNAL(needRoot()));
     connect(&_scanner, SIGNAL(deviceDetected(quint64, QString, QString, quint8)), this, SLOT(onDeviceDetected(quint64, QString, QString, quint8)));
     connect(&_scanner, SIGNAL(allScanFinished()), this, SLOT(onAllScansFinished()));
     QTimer::singleShot(100, &_scanner, SLOT(start()));
@@ -35,7 +36,6 @@ void DeviceList::addCurrentCompter() {
     quint64 currentMac = 0;
     foreach(QNetworkInterface netInterface, QNetworkInterface::allInterfaces()) {
         if((netInterface.flags() & QNetworkInterface::IsLoopBack) == 0) {
-            qDebug() << "omputer added";
             currentMac = NetUtils::strToMac(netInterface.hardwareAddress());
             _devices.insert(currentMac, new ServerDevice(Device(currentMac, "Cet Ordinateur", "127.0.0.1", Device::CurrentComputer, Device::ChapiServer), true));
             break;

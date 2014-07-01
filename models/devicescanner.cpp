@@ -4,6 +4,10 @@
 #include <qsettings.h>
 #include <qnetworkinterface.h>
 #include <qprocess.h>
+#ifndef Q_OS_WIN32
+    #include <unistd.h>
+#endif
+
 
 #include "../const.h"
 #include "../utils/netutils.h"
@@ -57,6 +61,13 @@ void DeviceScanner::sayHello() {
 }
 
 bool DeviceScanner::checkNmap(const QString &path) {
+#ifndef Q_OS_WIN32
+    if(getuid()) {
+        emit needRoot();
+        return true;
+    }
+#endif
+
 #ifdef Q_OS_WIN32
     QString exe = "/nmap.exe";
 #else
@@ -96,12 +107,17 @@ void DeviceScanner::scan() {
     foreach(QNetworkInterface inet, QNetworkInterface::allInterfaces()) {
         if(((inet.flags() & QNetworkInterface::IsLoopBack) == 0) && ((inet.flags() & QNetworkInterface::IsUp) == QNetworkInterface::IsUp)) {
             QHostAddress network = NetUtils::getNetwork(inet);
-            if(!network.isNull()){
+            if(!network.isNull() && (network.protocol() == QAbstractSocket::IPv4Protocol)){
                 int netMask = NetUtils::getMaskPrefix(inet);
                 if(!_networks.contains(network.toIPv4Address())){
                     _networks.insert(network.toIPv4Address(), QPair<QHostAddress, int>(network, netMask));
                 }
-                detectedNetworks.insert(network.toIPv4Address(), QPair<QHostAddress, int>(network,netMask));
+                if(detectedNetworks.contains(network.toIPv4Address())) {
+                    detectedNetworks[network.toIPv4Address()] =  QPair<QHostAddress, int>(network,netMask);
+                }
+                else {
+                    detectedNetworks.insert(network.toIPv4Address(), QPair<QHostAddress, int>(network,netMask));
+                }
             }
         }
     }
@@ -128,12 +144,13 @@ void DeviceScanner::scan() {
 #else
             QString exe = "/nmap";
 #endif
+
             connect(scanner, SIGNAL(error(QProcess::ProcessError)), this, SLOT(error(QProcess::ProcessError)));
             connect(scanner, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(finished(int,QProcess::ExitStatus)));
 
             scanner->setWorkingDirectory(_nmapPath);
-            scanner->start("\"" + _nmapPath + exe + "\"", args, QIODevice::ReadOnly);
             _scanners.insert(netIp, scanner);
+            scanner->start("\"" + _nmapPath + exe + "\"", args, QIODevice::ReadOnly);
         }
     }
 }
@@ -142,7 +159,19 @@ void DeviceScanner::scan() {
 void DeviceScanner::error(QProcess::ProcessError err){
     Q_UNUSED(err);
     QProcess *proc = (QProcess *)sender();
-    cleanProc(proc);
+
+    for (auto it = _scanners.begin(); it != _scanners.end();){
+        if (it.value() == proc) {
+            it = _scanners.erase(it);
+        }
+        else {
+            ++it;
+        }
+    }
+    disconnect(proc, SIGNAL(error(QProcess::ProcessError)), this, SLOT(error(QProcess::ProcessError)));
+    disconnect(proc, SIGNAL(finished(int,QProcess::ExitStatus)), this, SLOT(finished(int,QProcess::ExitStatus)));
+    proc->close();
+    proc->deleteLater();
 }
 
 void DeviceScanner::finished(int exitCode, QProcess::ExitStatus exitStatus){

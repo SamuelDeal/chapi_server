@@ -45,24 +45,47 @@ bool WindowsEventFilter::nativeEventFilter(const QByteArray &eventType, void *me
 #endif // _WIN32
 
 ChapiServerApp::ChapiServerApp(int &argc, char **argv) :
-    QApplication(argc, argv), _localServer(this)
+    QApplication(argc, argv), _localServer(this), _localSocket(this)
 {
     _mainWindow = NULL;
     _devList = NULL;
     _trayView = NULL;
 
-    QLocalSocket socket;
-    socket.connectToServer("ChapiServer");
-    if (socket.waitForConnected(300)) { //previous instance found!
-        socket.write("PING\n");
-        socket.flush();
-        socket.close();
-        QTimer::singleShot(1, this, SLOT(quit()));
-        return;
-    }
+    connect(&_localSocket, SIGNAL(connected()), this, SLOT(onPreviousInstanceDetected()));
+    connect(&_localSocket, SIGNAL(error(QLocalSocket::LocalSocketError)), this, SLOT(onLocalSocketError(QLocalSocket::LocalSocketError)));
+    _localCnxTimeout = new QTimer(this);
+    connect(_localCnxTimeout, SIGNAL(timeout()), this, SLOT(onLocalSocketTimeout()));
+    _localCnxTimeout->start(1000);
+    _localSocket.connectToServer("__chapi_server");
 
+    setWindowIcon(QIcon(":/icons/chapi.png"));
+}
+
+void ChapiServerApp::onPreviousInstanceDetected() {
+    _localCnxTimeout->stop();
+    _localSocket.write("PING\n");
+    _localSocket.flush();
+    _localSocket.close();
+    quit();
+}
+
+void ChapiServerApp::onLocalSocketTimeout() {
+    onLocalSocketError(QLocalSocket::SocketTimeoutError);
+}
+
+void ChapiServerApp::onLocalSocketError(QLocalSocket::LocalSocketError err) {
+    _localCnxTimeout->stop();
+    disconnect(&_localSocket, SIGNAL(connected()), this, SLOT(onPreviousInstanceDetected()));
+    disconnect(&_localSocket, SIGNAL(error(QLocalSocket::LocalSocketError)), this, SLOT(onLocalSocketError(QLocalSocket::LocalSocketError)));
+    _localSocket.abort();
+    _localSocket.close();
+    launch();
+}
+
+void ChapiServerApp::launch() {
     connect(&_localServer, SIGNAL(newConnection()), this, SLOT(onNewLocalConnection()));
-    _localServer.listen("ChapiServer");
+
+    _localServer.listen("__chapi_server");
 
     setWindowIcon(QIcon(":/icons/chapi.png"));
 
@@ -74,12 +97,12 @@ ChapiServerApp::ChapiServerApp(int &argc, char **argv) :
         installTranslator(translator);
     };
 
-
     connect(this, SIGNAL(lastWindowClosed()), this, SLOT(onLastWindowClosed()));
     QApplication::setQuitOnLastWindowClosed(false);
 
     _devList = new DeviceList;
     connect(_devList, SIGNAL(needNmap()), this, SLOT(onNmapNeeded()));
+    connect(_devList, SIGNAL(needRoot()), this, SLOT(onRootNeeded()));
     _devList->load();
 
     _trayView = new AppTrayView();
@@ -88,10 +111,7 @@ ChapiServerApp::ChapiServerApp(int &argc, char **argv) :
     connect(_trayView, SIGNAL(aboutCmd()), this, SLOT(onAboutAsked()));
     connect(_trayView, SIGNAL(exitCmd()), this, SLOT(onExitAsked()));
 
-    //TODO checkThat
-
-    SigHandler::get().addCallback([]{
-        qDebug() << "event catched";
+    SigHandler::get().addCallback([&]() -> bool{
         ChapiServerApp *app = static_cast<ChapiServerApp*>(ChapiServerApp::instance());
         QMetaObject::invokeMethod(app, "onExitAsked", Qt::QueuedConnection);
         return true;
@@ -102,7 +122,6 @@ ChapiServerApp::ChapiServerApp(int &argc, char **argv) :
 #endif
     openMainWindow();
 }
-
 
 ChapiServerApp::~ChapiServerApp() {
     if(_devList != NULL){
@@ -126,12 +145,11 @@ void ChapiServerApp::onMainWindowHideAsked() {
 }
 
 void ChapiServerApp::openMainWindow() {
-    if(_mainWindow != NULL){
-        return;
+    if(_mainWindow == NULL){
+        _mainWindow = new MainView(_devList);
+        _mainWindow->setAttribute(Qt::WA_DeleteOnClose);
+        connect(_mainWindow, SIGNAL(destroyed()), this, SLOT(onMainWindowClosed()));
     }
-    _mainWindow = new MainView(_devList);
-    _mainWindow->setAttribute(Qt::WA_DeleteOnClose);
-    connect(_mainWindow, SIGNAL(destroyed()), this, SLOT(onMainWindowClosed()));
     _mainWindow->show();
     setActiveWindow(_mainWindow);
     _mainWindow->setFocus();
@@ -169,6 +187,14 @@ void ChapiServerApp::onNmapNeeded() {
     else {
         _devList->setNmapPath(nmapView.newPath());
     }
+}
+
+
+void ChapiServerApp::onRootNeeded() {
+    QMessageBox::warning(_mainWindow, tr("Besoin des droits d'administration"), tr("Vous n'avez pas les droits d'administration.\n"
+        "Ceux-ci sont requis afin de scanner l'environnement afin de détecter les machines proches.\n"
+        "Pour le bon déroulement de cette application, merci de l'éxécuter avec les droits root"), QMessageBox::Ok);
+    QApplication::quit();
 }
 
 void ChapiServerApp::onAboutAsked() {

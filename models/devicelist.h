@@ -35,6 +35,7 @@ private:
 signals:
     void deviceListChanged();
     void needNmap();
+    void needRoot();
 
 private Q_SLOTS:
     void scanNeedNmap();

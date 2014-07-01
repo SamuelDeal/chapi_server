@@ -26,11 +26,11 @@ public:
 
     ~SigHandler();
 
-    void addCallback(const std::function <bool (void)>& , Signal mask = DEFAULT_SIGNALS);
+    void addCallback(const std::function <bool(void)>& , Signal mask = DEFAULT_SIGNALS);
 
 private:
     static const int NUM_SIGNALS = 6;
-    typedef std::list<std::pair<Signal, const std::function <bool (void)>& > > CallbackList;
+    typedef std::list<std::pair<Signal, std::function<bool (void)> > > CallbackList;
 
     SigHandler();
     SigHandler(SigHandler const&); //No Implementation

@@ -34,6 +34,7 @@ private:
 
 signals:
     void needNmap();
+    void needRoot();
     void onScanResult();
     void allScanFinished();
     void deviceDetected(quint64 mac, QString ip, QString name, quint8 type);

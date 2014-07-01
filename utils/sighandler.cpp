@@ -37,7 +37,11 @@ void SigHandler::addCallback(const std::function <bool (void)>&callback, SigHand
     for (int i = 0; i < NUM_SIGNALS; i++) {
         int logical = 0x1 << i;
         if (toRegister & logical) {
-            signal(POSIX_logicalToPhysical(logical), SIG_DFL);
+            struct sigaction sighandler;
+            sighandler.sa_handler = POSIX_handleFunc;
+            sigemptyset(&sighandler.sa_mask);
+            sighandler.sa_flags = 0;
+            sigaction(POSIX_logicalToPhysical(logical), &sighandler, NULL);
         }
     }
 #endif // !_WIN32

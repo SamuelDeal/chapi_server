@@ -2,9 +2,11 @@
 #define CHAPISERVERAPP_H
 
 #include <QApplication>
-#include <qlocalserver.h>
-#include <models/devicelist.h>
-#include <views/apptrayview.h>
+#include <QLocalServer>
+#include <QLocalSocket>
+
+#include "models/devicelist.h"
+#include "views/apptrayview.h"
 
 class ChapiServerApp : public QApplication
 {
@@ -14,11 +16,14 @@ public:
     ~ChapiServerApp();
 
     void start();
+    void launch();
 
 private:
     void openMainWindow();
 
     QLocalServer _localServer;
+    QLocalSocket _localSocket;
+    QTimer *_localCnxTimeout;
     QWidget*_mainWindow;
     DeviceList *_devList;
     AppTrayView *_trayView;
@@ -32,8 +37,12 @@ public slots:
     void onMainWindowClosed();
     void onLastWindowClosed();
     void onNmapNeeded();
+    void onRootNeeded();
     void onAboutAsked();
     void onExitAsked();
+    void onPreviousInstanceDetected();
+    void onLocalSocketError(QLocalSocket::LocalSocketError);
+    void onLocalSocketTimeout();
 };
 
 #endif // CHAPISERVERAPP_H
